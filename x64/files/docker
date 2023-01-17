@@ -353,6 +353,10 @@ COPY --from=buildstage /usr/local/share/perl5/ /usr/local/share/perl5/
 COPY --from=piconsstage /picons.tar.bz2 /picons.tar.bz2
 COPY root/ /
 
+RUN rm -rf /usr/bin/tv_grab_file
+RUN wget https://raw.githubusercontent.com/b-jesch/tv_grab_file/master/tv_grab_file -O /usr/bin/tv_grab_file
+RUN chmod +x /usr/bin/tv_grab_file
+
 # ports and volumes
 EXPOSE 9981 9982
 VOLUME /config
