@@ -6,7 +6,7 @@ ARG ARGTABLE_VER="2.13"
 ARG XMLTV_VER="v1.0.0"
 
 # environment settings
-ARG TZ="Europe/Oslo"
+ARG TZ="Europe/Vienna"
 ARG TVHEADEND_COMMIT
 ENV HOME="/config"
 
@@ -154,7 +154,7 @@ RUN \
  make DESTDIR=/tmp/libdvbcsa-build install && \
  echo "**** copy to /usr for tvheadend dependency ****" && \
  cp -pr /tmp/libdvbcsa-build/usr/* /usr/
- 
+
 RUN \
  echo "**** build tvheadend ****" && \
  if [ -z ${TVHEADEND_COMMIT+x} ]; then \
@@ -250,8 +250,8 @@ FROM ghcr.io/linuxserver/baseimage-alpine:3.15
 # set version label
 ARG BUILD_DATE
 ARG VERSION
-LABEL build_version="Linuxserver.io version:- ${VERSION} Build-date:- ${BUILD_DATE}"
-LABEL maintainer="saarg"
+LABEL build_version="version:- ${VERSION} Build-date:- ${BUILD_DATE}"
+LABEL maintainer="thealhu"
 
 # environment settings
 ENV HOME="/config"
@@ -353,9 +353,12 @@ COPY --from=buildstage /usr/local/share/perl5/ /usr/local/share/perl5/
 COPY --from=piconsstage /picons.tar.bz2 /picons.tar.bz2
 COPY root/ /
 
-RUN rm -rf /usr/bin/tv_grab_file
-RUN wget https://raw.githubusercontent.com/b-jesch/tv_grab_file/master/tv_grab_file -O /usr/bin/tv_grab_file
-RUN chmod +x /usr/bin/tv_grab_file
+
+RUN rm -rf /usr/bin/tv_grab_file && wget https://raw.githubusercontent.com/b-jesch/tv_grab_file/master/tv_grab_file -O /usr/bin/tv_grab_file && chmod +x /usr/bin/tv_grab_file
+
+RUN rm -rf /etc/cont-init.d/10-adduser
+ADD 10-adduser /etc/cont-init.d/10-adduser
+RUN chmod +x /etc/cont-init.d/10-adduser
 
 # ports and volumes
 EXPOSE 9981 9982
