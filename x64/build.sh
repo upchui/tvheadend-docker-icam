@@ -9,7 +9,7 @@ mv docker-tvheadend/patches/config.sub docker-tvheadend/patches/argtable/
 mv docker-tvheadend/patches/cpanfile docker-tvheadend/patches/cpan
 cp files/libdvbcsa.patch docker-tvheadend/patches/libdvbcsa/
 cp files/tvheadend43.patch docker-tvheadend/patches/tvheadend/
-cat files/docker > docker-tvheadend/Dockerfile
 cp files/10-adduser docker-tvheadend/
+cat files/docker > docker-tvheadend/Dockerfile
 cd docker-tvheadend/
 docker build -t thealhu/tvheadend-x64 --network host --no-cache .
