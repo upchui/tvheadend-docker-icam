@@ -1,4 +1,4 @@
-FROM ghcr.io/linuxserver/baseimage-alpine:3.15 as buildstage
+FROM ghcr.io/linuxserver/baseimage-alpine:3.17 as buildstage
 ############## build stage ##############
 
 # package versions
@@ -14,25 +14,20 @@ ENV HOME="/config"
 COPY patches/ /tmp/patches/
 
 RUN \
- echo "**** install build packages ****" && \
- apk add --no-cache \
+echo "**** install build packages ****" && \
+  apk add --no-cache \
     autoconf \
     automake \
     bsd-compat-headers \
-    bzip2 \
+    build-base \
     cmake \
-    curl \
-    ffmpeg-dev \
+    ffmpeg4-dev \
     file \
     findutils \
-    g++ \
-    gcc \
     gettext-dev \
     git \
     gnu-libiconv-dev \
-    gzip \
-    jq \
-    libcurl \
+    libdvbcsa-dev \
     libgcrypt-dev \
     libhdhomerun-dev \
     libtool \
@@ -41,7 +36,6 @@ RUN \
     libxml2-dev \
     libxslt-dev \
     linux-headers \
-    make \
     openssl-dev \
     opus-dev \
     patch \
@@ -101,10 +95,8 @@ RUN \
     pkgconf \
     pngquant \
     python3 \
-    sdl-dev \
-    tar \
+    sdl2-dev \
     uriparser-dev \
-    wget \
     x264-dev \
     x265-dev \
     zlib-dev
@@ -245,7 +237,7 @@ FROM ghcr.io/linuxserver/picons-builder as piconsstage
 
 
 ############## runtime stage ##############
-FROM ghcr.io/linuxserver/baseimage-alpine:3.15
+FROM ghcr.io/linuxserver/baseimage-alpine:3.17
 
 # set version label
 ARG BUILD_DATE
@@ -257,28 +249,22 @@ LABEL maintainer="thealhu"
 ENV HOME="/config"
 
 RUN \
- echo "**** install runtime packages ****" && \
- apk add --no-cache \
+  echo "**** install runtime packages ****" && \
+  apk add --no-cache \
     bsd-compat-headers \
-    bzip2 \
-    curl \
-    ffmpeg \
-    ffmpeg-libs \
+    ffmpeg4 \
+    ffmpeg4-libs \
     gnu-libiconv \
-    gzip \
-    libcrypto1.1 \
-    libcurl \
+    libdvbcsa \
     libhdhomerun-libs \
-    libssl1.1 \
     libva \
     libva-intel-driver \
     intel-media-driver \
-    mesa-dri-ati \
+    mesa \
     libvpx \
     libxml2 \
     libxslt \
     linux-headers \
-    openssl \
     opus \
     pcre2 \
     perl \
@@ -335,13 +321,10 @@ RUN \
     perl-xml-writer \
     py3-requests \
     python3 \
-    tar \
     uriparser \
-    wget \
     x264 \
     x265 \
     zlib
-
 # copy local files and buildstage artifacts
 COPY --from=buildstage /tmp/libdvbcsa-build/usr/ /usr/
 COPY --from=buildstage /tmp/argtable-build/usr/ /usr/
