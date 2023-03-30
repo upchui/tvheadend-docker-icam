@@ -1,3 +1,10 @@
+# syntax=docker/dockerfile:1
+
+############## picons stage ##############
+# built by https://github.com/linuxserver/picons-builder
+FROM ghcr.io/linuxserver/picons-builder as piconsstage
+
+
 FROM ghcr.io/linuxserver/baseimage-alpine:3.17 as buildstage
 ############## build stage ##############
 
@@ -10,8 +17,9 @@ ARG TZ="Europe/Vienna"
 ARG TVHEADEND_COMMIT
 ENV HOME="/config"
 
-# copy patches
+# copy patches and picons
 COPY patches/ /tmp/patches/
+COPY --from=piconsstage /picons.tar.bz2 /picons.tar.bz2
 
 RUN \
 echo "**** install build packages ****" && \
@@ -231,9 +239,12 @@ RUN \
  make -j 2 && \
  make DESTDIR=/tmp/comskip-build install
 
-############## picons stage ##############
-# built by https://github.com/linuxserver/picons-builder
-FROM ghcr.io/linuxserver/picons-builder as piconsstage
+RUN \
+  echo "***** extract picons ****" && \
+  mkdir -p /picons && \
+  tar xf \
+    /picons.tar.bz2 -C \
+    /picons
 
 
 ############## runtime stage ##############
@@ -334,7 +345,7 @@ COPY --from=buildstage /tmp/tvheadend-build/usr/ /usr/
 COPY --from=buildstage /tmp/xmltv-build/usr/ /usr/
 COPY --from=buildstage /usr/local/share/man/ /usr/local/share/man/
 COPY --from=buildstage /usr/local/share/perl5/ /usr/local/share/perl5/
-COPY --from=piconsstage /picons.tar.bz2 /picons.tar.bz2
+COPY --from=buildstage /picons /picons
 COPY root/ /
 
 RUN rm -rf /usr/bin/tv_grab_file && wget https://raw.githubusercontent.com/b-jesch/tv_grab_file/master/tv_grab_file -O /usr/bin/tv_grab_file && chmod +x /usr/bin/tv_grab_file
