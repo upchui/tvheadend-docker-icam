@@ -7,7 +7,6 @@ mv docker-tvheadend/patches/config.guess docker-tvheadend/patches/argtable/
 mv docker-tvheadend/patches/config.sub docker-tvheadend/patches/argtable/
 cp files/libdvbcsa.patch docker-tvheadend/patches/libdvbcsa/
 cp files/tvheadend43.patch docker-tvheadend/patches/tvheadend/
-cp files/cpanm docker-tvheadend/
 cp files/10-adduser docker-tvheadend/
 cat files/docker > docker-tvheadend/Dockerfile
 cd docker-tvheadend/
