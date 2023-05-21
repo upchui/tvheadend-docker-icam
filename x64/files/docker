@@ -205,6 +205,7 @@ RUN \
     pcre2 \
     perl \
     py3-requests \
+    perl-datetime-format-strptime \
     python3 \
     uriparser \
     x264 \
