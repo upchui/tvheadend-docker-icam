@@ -204,8 +204,9 @@ RUN \
     opus \
     pcre2 \
     perl \
-    py3-requests \
     perl-datetime-format-strptime \
+    perl-json\
+    py3-requests \
     python3 \
     uriparser \
     x264 \
