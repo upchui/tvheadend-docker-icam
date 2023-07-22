@@ -21,7 +21,7 @@ COPY patches/ /tmp/patches/
 COPY --from=piconsstage /picons.tar.bz2 /picons.tar.bz2
 
 RUN \
-echo "**** install build packages ****" && \
+  echo "**** install build packages ****" && \
   apk add --no-cache \
     autoconf \
     automake \
@@ -187,9 +187,15 @@ RUN \
   echo "**** install runtime packages ****" && \
   apk add --no-cache \
     bsd-compat-headers \
-    ffmpeg4 \
-    ffmpeg4-libs \
     ffmpeg \
+    ffmpeg4-libavcodec \
+    ffmpeg4-libavdevice \
+    ffmpeg4-libavfilter \
+    ffmpeg4-libavformat \
+    ffmpeg4-libavutil \
+    ffmpeg4-libpostproc \
+    ffmpeg4-libswresample \
+    ffmpeg4-libswscale \
     gnu-libiconv \
     libdvbcsa \
     libhdhomerun-libs \
@@ -205,7 +211,7 @@ RUN \
     pcre2 \
     perl \
     perl-datetime-format-strptime \
-    perl-json\
+    perl-json \
     py3-requests \
     python3 \
     uriparser \
@@ -213,6 +219,7 @@ RUN \
     x265 \
     xmltv \
     zlib
+
 # copy local files and buildstage artifacts
 COPY --from=buildstage /tmp/libdvbcsa-build/usr/ /usr/
 COPY --from=buildstage /tmp/argtable-build/usr/ /usr/

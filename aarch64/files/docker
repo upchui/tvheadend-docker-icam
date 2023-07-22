@@ -188,9 +188,15 @@ RUN \
   echo "**** install runtime packages ****" && \
   apk add --no-cache \
     bsd-compat-headers \
-    ffmpeg4 \
-    ffmpeg4-libs \
     ffmpeg \
+    ffmpeg4-libavcodec \
+    ffmpeg4-libavdevice \
+    ffmpeg4-libavfilter \
+    ffmpeg4-libavformat \
+    ffmpeg4-libavutil \
+    ffmpeg4-libpostproc \
+    ffmpeg4-libswresample \
+    ffmpeg4-libswscale \
     gnu-libiconv \
     libdvbcsa \
     libhdhomerun-libs \
@@ -212,7 +218,6 @@ RUN \
     x265 \
     xmltv \
     zlib
-
 
 # copy local files and buildstage artifacts
 COPY --from=buildstage /tmp/libdvbcsa-build/usr/ /usr/
