@@ -9,5 +9,6 @@ cp files/libdvbcsa.patch docker-tvheadend/patches/libdvbcsa/
 cp files/tvheadend43.patch docker-tvheadend/patches/tvheadend/
 cp files/10-adduser docker-tvheadend/
 cat files/docker > docker-tvheadend/Dockerfile
+cat files/metric_heartbeat.sh > docker-tvheadend/metric_heartbeat.sh
 cd docker-tvheadend/
 docker build -t thealhu/tvheadend-x64 --network host --no-cache .

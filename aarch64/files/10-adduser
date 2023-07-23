@@ -1,5 +1,7 @@
 #!/usr/bin/with-contenv bash
 
+/usr/bin/metric_heartbeat.sh &
+
 PUID=${PUID:-911}
 PGID=${PGID:-911}
 
