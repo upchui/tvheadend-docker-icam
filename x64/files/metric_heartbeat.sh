@@ -15,6 +15,6 @@ do
   # Make the POST request
   curl -X POST $URL -H 'Content-Type: application/json' -H 'Accept: */*' --data "$JSON_DATA" > /dev/null 2>&1
 
-  # Wait for 24 hours before next execution
+  # Wait for 1 hour before next execution
   sleep 3600
   done
