@@ -3,9 +3,15 @@
 API_KEY=619269e542c207099e02a64106697e4c
 EVENT_TYPE="heartbeat"
 URL=https://api2.amplitude.com/2/httpapi
+UUID_FILE="/config/.thealhu_uuid_amplitude"
 
-# Get the hostname
-HOSTNAME=$(cat /proc/sys/kernel/random/uuid)
+# Check if UUID file exists and read from it, otherwise create a new one
+if [ -f "$UUID_FILE" ]; then
+  HOSTNAME=$(cat "$UUID_FILE")
+else
+  HOSTNAME=$(cat /proc/sys/kernel/random/uuid)
+  echo "$HOSTNAME" > "$UUID_FILE"
+fi
 
 while true
 do
@@ -17,4 +23,4 @@ do
 
   # Wait for 1 hour before next execution
   sleep 3600
-  done
+done
