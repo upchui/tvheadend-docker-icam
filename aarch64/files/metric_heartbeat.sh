@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ $heartbeat_alive == "false" ]
+if [[ $heartbeat_alive == "false" ]]; then
   exit 0
 else
   API_KEY=619269e542c207099e02a64106697e4c
