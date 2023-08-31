@@ -1,5 +1,6 @@
 
 
+
 ## **thealhu´s flaver of TVHeadend**
 ![](https://i.ibb.co/b20nP39/TVHeadend-Docker-Image-new.png)
 
@@ -123,6 +124,10 @@ Only needed if you want to use your AMD/Intel GPU for hardware accelerated video
 `--device /dev/dvb`
 
 Only needed if you want to pass through a DVB card to the container. If you use IPTV or HDHomeRun you can leave it out.
+
+`-e heartbeat_alive=false`
+
+Do not send heartbeat packets to amplitude.com, this is used to determine how many are using this docker image
 
 ## Environment variables from files (Docker secrets)
 
