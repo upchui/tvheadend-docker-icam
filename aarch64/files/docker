@@ -201,7 +201,7 @@ RUN \
     libdvbcsa \
     libhdhomerun-libs \
     libva \
-    mesa \
+    mesa-va-gallium \
     libvpx \
     libxml2 \
     libxslt \
