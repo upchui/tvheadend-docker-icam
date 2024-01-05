@@ -90,8 +90,6 @@ RUN \
  git clone https://github.com/tvheadend/tvheadend.git /tmp/tvheadend && \
  cd /tmp/tvheadend && \
  git checkout ${TVHEADEND_COMMIT} && \
- echo "**** patch tvheadend ****" && \
- git apply /tmp/patches/tvheadend/tvheadend43.patch && \
  echo "**** configure tvheadend ****" && \
  ./configure \
     `#Encoding` \

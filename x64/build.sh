@@ -6,11 +6,11 @@ mkdir docker-tvheadend/patches/tvheadend
 mv docker-tvheadend/patches/config.guess docker-tvheadend/patches/argtable/
 mv docker-tvheadend/patches/config.sub docker-tvheadend/patches/argtable/
 cp files/libdvbcsa.patch docker-tvheadend/patches/libdvbcsa/
-cp files/tvheadend43.patch docker-tvheadend/patches/tvheadend/
+#cp files/tvheadend43.patch docker-tvheadend/patches/tvheadend/
 cp files/10-adduser docker-tvheadend/
-rm -rf docker-tvheadend/src/descrambler/tvhcsa.c docker-tvheadend/src/descrambler/tvhcsa.h
-mv files/fix_for_899b38ae5b960688b600be3e77526d92cecea536/tvhcsa.c  docker-tvheadend/src/descrambler/tvhcsa.c 
-mv files/fix_for_899b38ae5b960688b600be3e77526d92cecea536/tvhcsa.h  docker-tvheadend/src/descrambler/tvhcsa.h
+#rm -rf docker-tvheadend/src/descrambler/tvhcsa.c docker-tvheadend/src/descrambler/tvhcsa.h
+#mv files/fix_for_899b38ae5b960688b600be3e77526d92cecea536/tvhcsa.c  docker-tvheadend/src/descrambler/tvhcsa.c 
+#mv files/fix_for_899b38ae5b960688b600be3e77526d92cecea536/tvhcsa.h  docker-tvheadend/src/descrambler/tvhcsa.h
 cat files/docker > docker-tvheadend/Dockerfile
 cat files/metric_heartbeat.sh > docker-tvheadend/metric_heartbeat.sh
 cd docker-tvheadend/
