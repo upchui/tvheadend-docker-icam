@@ -1,7 +1,7 @@
 
 
 
-## **thealhu´s flaver of TVHeadend**
+## **thealhu´s flavor of TVHeadend**
 ![](https://i.ibb.co/b20nP39/TVHeadend-Docker-Image-new.png)
 
  - **ICAM support**
