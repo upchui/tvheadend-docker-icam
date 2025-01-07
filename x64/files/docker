@@ -142,7 +142,7 @@ RUN \
     /tmp/argtable --strip-components=1 && \
  cp /tmp/patches/argtable/config.* /tmp/argtable && \
  cd /tmp/argtable && \
- ./configure \
+ CFLAGS="-include ctype.h" ./configure \
     --prefix=/usr && \
  make -j 2 && \
  make check && \
