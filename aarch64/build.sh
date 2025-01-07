@@ -11,4 +11,4 @@ cp files/10-adduser docker-tvheadend/
 cat files/docker > docker-tvheadend/Dockerfile
 cat files/metric_heartbeat.sh > docker-tvheadend/metric_heartbeat.sh
 cd docker-tvheadend/
-docker build -t thealhu/tvheadend-aarch64 --network host --no-cache .
+docker build --platform linux/arm64 -t thealhu/tvheadend-aarch64 --network host --no-cache .
