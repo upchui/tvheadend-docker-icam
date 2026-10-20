@@ -1,7 +1,7 @@
 
 
 
-## **thealhu´s flavor of TVHeadend**
+## **thealhu's flavor of TVHeadend**
 ![](https://i.ibb.co/b20nP39/TVHeadend-Docker-Image-new.png)
 
  - **ICAM support**
@@ -26,6 +26,30 @@ If you want to build the image yourself, everything you need can be found [here]
 ICAM stands for "Integrated Conditional Access Module". It is a security module that can be built into some digital satellite receivers or set-top boxes. It is used to access encrypted channels that require separate activation. The ICAM is used to perform the decryption of the encrypted signals being broadcast by the satellite. It contains a security chip that enables authentication and access to the encrypted channels. The receiver must be equipped with a valid smart card or other security module in order to access the encrypted channels.
 
 **In these TVHeadend docker images, icam support is built-in.**
+
+### What is patched in this image?
+
+- **libdvbcsa** is built with ICAM support, so TVHeadend can descramble ICAM channels.
+- **TVHeadend** gets a patch on top of the official code:
+  - ICAM is detected from every VideoGuard ECM, and each control word is used with the ICAM mode of the ECM it belongs to.
+  - Keys that OSCam sends with `extended_cw_api` (CSA-ALT) are accepted instead of being rejected with `Invalid algo 3`.
+  - The log shows when ICAM is enabled for a channel.
+
+### Check that ICAM is working
+
+When the first encrypted channel is tuned, the TVHeadend log shows:
+
+```
+dvbcsa_bs_key_set_ecm() function detected in libdvbcsa
+```
+
+For a channel that uses ICAM, it also shows:
+
+```
+ICAM (patched by thealhu's flavor of TVHeadend) enabled for service "Sky Atlantic" (ECM pid 7182)
+```
+
+If the log shows `ICAM key requested but libdvbcsa lacks dvbcsa_bs_key_set_ecm()` instead, the libdvbcsa in use has no ICAM support and ICAM channels stay scrambled.
 
 ## Usage
 ### docker-compose (recommended)

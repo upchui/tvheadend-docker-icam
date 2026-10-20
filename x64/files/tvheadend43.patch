@@ -40,7 +40,7 @@ index 73e8a0a5298da96a260d5ff8c4d38acfa381370b..b586d617f1ec2becdd44d607a7c2d0a9
        return;
      }
 diff --git a/src/descrambler/descrambler.c b/src/descrambler/descrambler.c
-index 205a1540c2821cc53b197081b85e49ac0aa8dec6..10ff9c5bcb83c08b50daa79b613fdded85dbaa14 100644
+index 205a1540c2821cc53b197081b85e49ac0aa8dec6..19b34d23d5248c746cc95ba1bdf84fb0f9aee96a 100644
 --- a/src/descrambler/descrambler.c
 +++ b/src/descrambler/descrambler.c
 @@ -393,6 +393,38 @@ descrambler_quick_ecm ( mpegts_service_t *t, int pid )
@@ -71,7 +71,7 @@ index 205a1540c2821cc53b197081b85e49ac0aa8dec6..10ff9c5bcb83c08b50daa79b613fdded
 +      if (mode >= 0) break;
 +    }
 +    if (mode >= 0 && mode != dr->dr_ecm_mode) {
-+      tvhinfo(LS_DESCRAMBLER, "ICAM (CSA-ALT) %s for service \"%s\" (ECM pid %d)",
++      tvhinfo(LS_DESCRAMBLER, "ICAM (patched by thealhu's flavor of TVHeadend) %s for service \"%s\" (ECM pid %d)",
 +              mode ? "enabled" : "disabled", t->s_dvb_svcname, pid);
 +      dr->dr_ecm_mode = mode;
 +    }
