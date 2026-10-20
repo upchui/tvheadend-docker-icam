@@ -1,24 +1,47 @@
+libdvbcsa ICAM (VideoGuard CSA-ALT) support
+
+- dvbcsa_bs_key_set_ecm(ecm, cw, key): ecm = 4 selects the ICAM block cipher
+  key (CW bytes 0 and 4 bit permuted), any other value is standard CSA
+- dvbcsa_bs_key_set() and dvbcsa_key_schedule_block() share the code path
+  with the _ecm variants instead of duplicating it
+- DVBCSA_KEY_ECM in dvbcsa/dvbcsa.h for compile time detection
+- test/testecm is run by "make check"
+
+diff --git a/README b/README
+index f480e678871b6de1daab00b2a8cac687a7eeb4f2..c71bb5f4682d8a34511dc6dcdab9aacccae4e667 100644
 --- a/README
 +++ b/README
-@@ -135,6 +135,12 @@ Example:
+@@ -135,6 +135,19 @@ Example:
      dvbcsa_bs_encrypt(key, b, 184);
  
  
-+    DVBCSA_KEY_ECM
++ICAM (CSA-ALT)
++==============
 +
-+    unsigned char ecm = (ecm_caid >> 8 == 0x09 && (ecm_data[2] - ecm_data[4]) == 4) ? ecm_data[21] : 0;
++dvbcsa_bs_key_set_ecm() takes an additional ECM mode, 4 selects the
++ICAM (VideoGuard CSA-ALT) block cipher key, any other value is standard
++CSA and equal to dvbcsa_bs_key_set(). DVBCSA_KEY_ECM is defined by
++dvbcsa/dvbcsa.h when the function is available.
++
++    unsigned char ecm = (caid >> 8 == 0x09 && ecm_data[4] != 0 &&
++                         (ecm_data[2] - ecm_data[4]) == 4) ? 4 : 0;
 +    dvbcsa_bs_key_set_ecm(ecm, cw, key);
 +
 +
  Portability
  ===========
  
+diff --git a/src/dvbcsa/dvbcsa.h b/src/dvbcsa/dvbcsa.h
+index c7e9c591ac1dc04d7728fa8a05899d1b3daa6cbc..cb4bf56a7318b3f613cef4fe5944a3d10966936d 100644
 --- a/src/dvbcsa/dvbcsa.h
 +++ b/src/dvbcsa/dvbcsa.h
-@@ -93,6 +93,11 @@ void dvbcsa_bs_key_free(struct dvbcsa_bs_key_s *key);
+@@ -93,6 +93,14 @@ void dvbcsa_bs_key_free(struct dvbcsa_bs_key_s *key);
  
  void dvbcsa_bs_key_set(const dvbcsa_cw_t cw, struct dvbcsa_bs_key_s *key);
  
++/** setup a csa bitslice key context, ecm = 4 selects the ICAM (CSA-ALT)
++    block cipher key, other values are the same as dvbcsa_bs_key_set() */
++
 +#ifndef DVBCSA_KEY_ECM
 +#define DVBCSA_KEY_ECM 1
 +#endif
@@ -27,78 +50,49 @@
  /** get maximum number of packet per batch */
  
  unsigned int dvbcsa_bs_batch_size(void);
+diff --git a/src/dvbcsa_bs_key.c b/src/dvbcsa_bs_key.c
+index e2fcf55c0102e3b85f48f34c62ab8c59c1bb1356..a59498f83422268cd3cf4a726570dbba1fe2718d 100644
 --- a/src/dvbcsa_bs_key.c
 +++ b/src/dvbcsa_bs_key.c
-@@ -63,3 +63,40 @@ dvbcsa_bs_key_set (const dvbcsa_cw_t cw, struct dvbcsa_bs_key_s *key)
+@@ -27,7 +27,7 @@
+ #include "dvbcsa_bs.h"
+ 
+ void
+-dvbcsa_bs_key_set (const dvbcsa_cw_t cw, struct dvbcsa_bs_key_s *key)
++dvbcsa_bs_key_set_ecm (const unsigned char ecm, const dvbcsa_cw_t cw, struct dvbcsa_bs_key_s *key)
+ {
+   dvbcsa_keys_t kk;
+   int i;
+@@ -41,7 +41,7 @@ dvbcsa_bs_key_set (const dvbcsa_cw_t cw, struct dvbcsa_bs_key_s *key)
+ 
+   /* precalculations for block */
+ 
+-  dvbcsa_key_schedule_block(cw, kk);
++  dvbcsa_key_schedule_block_ecm(ecm, cw, kk);
+ 
+   for (i = 0; i < DVBCSA_KEYSBUFF_SIZE; i++)
+     {
+@@ -63,3 +63,8 @@ dvbcsa_bs_key_set (const dvbcsa_cw_t cw, struct dvbcsa_bs_key_s *key)
      }
  }
  
 +void
-+dvbcsa_bs_key_set_ecm (const unsigned char ecm, const dvbcsa_cw_t cw, struct dvbcsa_bs_key_s *key)
++dvbcsa_bs_key_set (const dvbcsa_cw_t cw, struct dvbcsa_bs_key_s *key)
 +{
-+  dvbcsa_keys_t kk;
-+  int i;
-+
-+  /* precalculations for stream */
-+
-+  uint64_t ck = dvbcsa_load_le64(cw);
-+
-+  for (i = 0; i < DVBCSA_CWBITS_SIZE; i++)
-+    key->stream[i] = (ck >> (i^4)) & 1 ? BS_VAL8(ff) : BS_VAL8(00);
-+
-+  /* precalculations for block */
-+
-+  dvbcsa_key_schedule_block_ecm(ecm, cw, kk);
-+
-+  for (i = 0; i < DVBCSA_KEYSBUFF_SIZE; i++)
-+    {
-+#if BS_BATCH_SIZE == 32
-+      *(dvbcsa_u32_aliasing_t *)(key->block + i) = kk[i] * 0x01010101;
-+
-+#elif BS_BATCH_SIZE == 64
-+      *(dvbcsa_u64_aliasing_t *)(key->block + i) = kk[i] * 0x0101010101010101ULL;
-+
-+#elif BS_BATCH_SIZE > 64 && BS_BATCH_SIZE % 64 == 0
-+      uint64_t v = kk[i] * 0x0101010101010101ULL;
-+      int j;
-+
-+      for (j = 0; j < BS_BATCH_BYTES / 8; j++)
-+        *((dvbcsa_u64_aliasing_t *)(key->block + i) + j) = v;
-+#else
-+# error
-+#endif
-+    }
++  dvbcsa_bs_key_set_ecm(0, cw, key);
 +}
-+
+diff --git a/src/dvbcsa_key.c b/src/dvbcsa_key.c
+index 1ff17e05b10c063944368dbbe6f464222cf66dc3..70b219fe28d69e352a71f4a8c3b32542f4baf932 100644
 --- a/src/dvbcsa_key.c
 +++ b/src/dvbcsa_key.c
-@@ -585,3 +585,18 @@ dvbcsa_key_schedule_block(const dvbcsa_cw_t cw, uint8_t * kk)
-       kk[i*8+j] = (k[i]>>(j*8)) ^ i;
+@@ -570,13 +570,45 @@ static inline uint64_t dvbcsa_key_permute_block(uint64_t k)
+   return n;
  }
  
-+void
-+dvbcsa_key_schedule_block_ecm(const unsigned char ecm, const dvbcsa_cw_t cw, uint8_t * kk)
-+{
-+  uint64_t k[7];
-+  int i, j;
++/* ICAM (CSA-ALT) bit permutation of the CW bytes 0 and 4 */
 +
-+  k[6] = dvbcsa_load_le64_ecm(ecm, cw);
-+  for (i = 6; i > 0; i--)
-+    k[i - 1] = dvbcsa_key_permute_block(k[i]);
-+
-+  for (i = 0; i < 7; i++)
-+    for (j = 0; j < 8; j++)
-+      kk[i*8+j] = (k[i]>>(j*8)) ^ i;
-+}
-+
---- a/src/dvbcsa_pv.h
-+++ b/src/dvbcsa_pv.h
-@@ -87,6 +87,25 @@ struct dvbcsa_key_s
- };
- 
- extern const uint8_t dvbcsa_block_sbox[256];
 +static const uint8_t csa_block_perm_ecm[256] =
-+{
++  {
 +    0x00, 0x02, 0x80, 0x82, 0x20, 0x22, 0xa0, 0xa2, 0x04, 0x06, 0x84, 0x86, 0x24, 0x26, 0xa4, 0xa6,
 +    0x40, 0x42, 0xc0, 0xc2, 0x60, 0x62, 0xe0, 0xe2, 0x44, 0x46, 0xc4, 0xc6, 0x64, 0x66, 0xe4, 0xe6,
 +    0x01, 0x03, 0x81, 0x83, 0x21, 0x23, 0xa1, 0xa3, 0x05, 0x07, 0x85, 0x87, 0x25, 0x27, 0xa5, 0xa7,
@@ -115,11 +109,44 @@
 +    0x58, 0x5a, 0xd8, 0xda, 0x78, 0x7a, 0xf8, 0xfa, 0x5c, 0x5e, 0xdc, 0xde, 0x7c, 0x7e, 0xfc, 0xfe,
 +    0x19, 0x1b, 0x99, 0x9b, 0x39, 0x3b, 0xb9, 0xbb, 0x1d, 0x1f, 0x9d, 0x9f, 0x3d, 0x3f, 0xbd, 0xbf,
 +    0x59, 0x5b, 0xd9, 0xdb, 0x79, 0x7b, 0xf9, 0xfb, 0x5d, 0x5f, 0xdd, 0xdf, 0x7d, 0x7f, 0xfd, 0xff
-+};
++  };
++
+ void
+-dvbcsa_key_schedule_block(const dvbcsa_cw_t cw, uint8_t * kk)
++dvbcsa_key_schedule_block_ecm(const unsigned char ecm, const dvbcsa_cw_t cw, uint8_t * kk)
+ {
++  dvbcsa_cw_t icw;
++  const uint8_t *p = cw;
+   uint64_t k[7];
+   int i, j;
  
- void dvbcsa_block_decrypt (const dvbcsa_keys_t key, const dvbcsa_block_t in, dvbcsa_block_t out);
- void dvbcsa_block_encrypt (const dvbcsa_keys_t key, const dvbcsa_block_t in, dvbcsa_block_t out);
-@@ -95,6 +114,7 @@ void dvbcsa_stream_xor (const dvbcsa_cw_t cw, const dvbcsa_block_t iv,
+-  k[6] = dvbcsa_load_le64(cw);
++  if (ecm == 4)
++    {
++      memcpy(icw, cw, sizeof(icw));
++      icw[0] = csa_block_perm_ecm[cw[0]];
++      icw[4] = csa_block_perm_ecm[cw[4]];
++      p = icw;
++    }
++
++  k[6] = dvbcsa_load_le64(p);
+   for (i = 6; i > 0; i--)
+     k[i - 1] = dvbcsa_key_permute_block(k[i]);
+ 
+@@ -585,3 +617,8 @@ dvbcsa_key_schedule_block(const dvbcsa_cw_t cw, uint8_t * kk)
+       kk[i*8+j] = (k[i]>>(j*8)) ^ i;
+ }
+ 
++void
++dvbcsa_key_schedule_block(const dvbcsa_cw_t cw, uint8_t * kk)
++{
++  dvbcsa_key_schedule_block_ecm(0, cw, kk);
++}
+diff --git a/src/dvbcsa_pv.h b/src/dvbcsa_pv.h
+index 83753b1b8aa480c8a7e1e1cf01eae1105f71fa24..fa258fb238114c7f0ea754b8bb8478e5d24b2f45 100644
+--- a/src/dvbcsa_pv.h
++++ b/src/dvbcsa_pv.h
+@@ -95,6 +95,7 @@ void dvbcsa_stream_xor (const dvbcsa_cw_t cw, const dvbcsa_block_t iv,
                          uint8_t *stream, unsigned int len);
  
  void dvbcsa_key_schedule_block(const dvbcsa_cw_t cw, uint8_t * kk);
@@ -127,37 +154,137 @@
  
  DVBCSA_INLINE static inline void
  dvbcsa_xor_64 (uint8_t *b, const uint8_t *a)
-@@ -141,6 +161,33 @@ dvbcsa_load_le64(const uint8_t *p)
- #endif
- }
+diff --git a/test/Makefile.am b/test/Makefile.am
+index 92bbeb0c213daca5f1e7738d66ee3ee46e45955d..aad631ce3d7f35bb633d57d3e3552177fddbba14 100644
+--- a/test/Makefile.am
++++ b/test/Makefile.am
+@@ -1,6 +1,6 @@
  
-+DVBCSA_INLINE static inline uint64_t
-+dvbcsa_load_le64_ecm(const unsigned char ecm, const uint8_t *p)
+-noinst_PROGRAMS = benchbitslice testbitslice benchdec benchenc testdec testenc testbsops benchbitsliceks benchks
+-TESTS = testbsops testdec testenc testbitslice
++noinst_PROGRAMS = benchbitslice testbitslice benchdec benchenc testdec testenc testbsops benchbitsliceks benchks testecm
++TESTS = testbsops testdec testenc testbitslice testecm
+ 
+ benchbitslice_SOURCES = benchbitslice.c
+ benchbitslice_LDADD = $(top_builddir)/src/libdvbcsa.la
+@@ -38,3 +38,7 @@ testbsops_SOURCES = testbsops.c
+ testbsops_LDADD = $(top_builddir)/src/libdvbcsa.la
+ testbsops_CFLAGS = -I$(top_srcdir)/src
+ 
++
++testecm_SOURCES = testecm.c
++testecm_LDADD = $(top_builddir)/src/libdvbcsa.la
++testecm_CFLAGS = -I$(top_srcdir)/src
+diff --git a/test/testecm.c b/test/testecm.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..a7ce0bb5dedb1bf84319a22bef3dddb01215ed66
+--- /dev/null
++++ b/test/testecm.c
+@@ -0,0 +1,107 @@
++/*
++
++    This file is part of libdvbcsa.
++
++    libdvbcsa is free software; you can redistribute it and/or modify it
++    under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 2 of the License, or
++    (at your option) any later version.
++
++    libdvbcsa is distributed in the hope that it will be useful, but
++    WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++    General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with libdvbcsa; if not, write to the Free Software Foundation,
++    Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++
++    ICAM (CSA-ALT) key setup test: mode 4 uses the bit permuted CW
++    bytes 0 and 4 for the block cipher and the original CW for the
++    stream cipher, all other modes are standard CSA.
++
++*/
++
++#include <stdio.h>
++#include <string.h>
++
++#include <dvbcsa/dvbcsa.h>
++#include "dvbcsa_bs.h"
++
++/* destination bit of each CW bit, independent from the lookup table */
++static const int perm_bit[8] = { 1, 7, 5, 2, 6, 0, 3, 4 };
++
++static unsigned char
++perm_ecm(unsigned char v)
 +{
-+  dvbcsa_block_t W;
-+  memcpy(W, p, sizeof(W));
-+  if (ecm == 4)
-+    {
-+      W[0] = csa_block_perm_ecm[p[0]];
-+      W[4] = csa_block_perm_ecm[p[4]];
-+    }
-+#if defined(DVBCSA_ENDIAN_LITTLE)
-+  uint64_t i;
-+  memcpy(&i, W, 8);
-+  return i;
-+#else
-+  return (uint64_t)( ((uint64_t)W[7] << 56) |
-+                     ((uint64_t)W[6] << 48) |
-+                     ((uint64_t)W[5] << 40) |
-+                     ((uint64_t)W[4] << 32) |
-+                     ((uint64_t)W[3] << 24) |
-+                     ((uint64_t)W[2] << 16) |
-+                     ((uint64_t)W[1] << 8 ) |
-+                      (uint64_t)W[0]
-+                     );
-+#endif
++  unsigned char r = 0;
++  int i;
++
++  for (i = 0; i < 8; i++)
++    if (v & (1 << i))
++      r |= 1 << perm_bit[i];
++
++  return r;
 +}
 +
- DVBCSA_INLINE static inline void
- dvbcsa_store_le64(uint8_t *p, const uint64_t w)
- {
++int
++main(void)
++{
++  struct dvbcsa_bs_key_s *key = dvbcsa_bs_key_alloc();
++  struct dvbcsa_bs_key_s *ref = dvbcsa_bs_key_alloc();
++  struct dvbcsa_bs_key_s *alt = dvbcsa_bs_key_alloc();
++  dvbcsa_cw_t cw, cw_alt;
++  unsigned int seed = 1;
++  int n, i, ecm, fail = 0;
++
++  for (n = 0; n < 256; n++)
++    {
++      for (i = 0; i < 8; i++)
++        {
++          seed = seed * 1103515245 + 12345;
++          cw[i] = seed >> 16;
++        }
++      /* cover all values of the permuted bytes */
++      cw[0] = n;
++      cw[4] = 255 - n;
++
++      dvbcsa_bs_key_set(cw, ref);
++
++      for (ecm = 0; ecm < 256; ecm++)
++        {
++          if (ecm == 4)
++            continue;
++          dvbcsa_bs_key_set_ecm(ecm, cw, key);
++          if (memcmp(key, ref, sizeof(*key)))
++            {
++              printf("ecm %d: key differs from dvbcsa_bs_key_set(), n=%d\n", ecm, n);
++              fail++;
++            }
++        }
++
++      memcpy(cw_alt, cw, sizeof(cw_alt));
++      cw_alt[0] = perm_ecm(cw[0]);
++      cw_alt[4] = perm_ecm(cw[4]);
++      dvbcsa_bs_key_set(cw_alt, alt);
++      dvbcsa_bs_key_set_ecm(4, cw, key);
++
++      if (memcmp(key->block, alt->block, sizeof(key->block)))
++        {
++          printf("ecm 4: wrong block key, n=%d\n", n);
++          fail++;
++        }
++      if (memcmp(key->stream, ref->stream, sizeof(key->stream)))
++        {
++          printf("ecm 4: wrong stream key, n=%d\n", n);
++          fail++;
++        }
++    }
++
++  dvbcsa_bs_key_free(alt);
++  dvbcsa_bs_key_free(ref);
++  dvbcsa_bs_key_free(key);
++
++  puts(fail ? "FAILED" : "OK");
++
++  return fail ? 1 : 0;
++}

@@ -1,84 +1,194 @@
---- a/configure
-+++ b/configure
-@@ -714,6 +714,14 @@ if enabled_or_auto tvhcsa; then
-        check_cc_lib    dvbcsa dvbcsa_l) ||\
-       die "Failed to find dvbcsa library"
-       LDFLAGS="$LDFLAGS -ldvbcsa"
-+      check_cc '
-+      #include <dvbcsa/dvbcsa.h>
-+      int test(void)
-+      {
-+        dvbcsa_bs_key_set_ecm;
-+        return 0;
-+      }
-+      ' && CFLAGS="$CFLAGS -DDVBCSA_KEY_ECM=1" && printf "    ^ dvbcsa icam\n"
-     fi
-   else
-     disable tvhcsa
---- a/src/descrambler/caid.h
-+++ b/src/descrambler/caid.h
-@@ -46,6 +46,7 @@ uint16_t name2caid(const char *str);
- card_type_t detect_card_type(const uint16_t caid);
- 
- static inline int caid_is_irdeto(uint16_t caid) { return (caid >> 8) == 0x06; }
-+static inline int caid_is_videoguard(uint16_t caid) { return (caid >> 8) == 0x09; }
- static inline int caid_is_powervu(uint16_t caid) { return (caid >> 8) == 0x0e; }
- static inline int caid_is_betacrypt(uint16_t caid) { return (caid >> 8) == 0x17; }
- static inline int caid_is_dvn(uint16_t caid) { return caid == 0x4a30; }
+tvheadend ICAM (VideoGuard CSA-ALT) improvements on top of tvheadend master
+
+- descrambler: detect the ICAM mode once per ECM, before the ECM is passed
+  to the CA client, only from in-use VideoGuard CAIDs on the ECM PID
+- descrambler: bind the ICAM mode to each received CW (key_ecm[]) and apply
+  it when the key is flushed to the decoder, not the mode of the latest ECM
+- descrambler: log once per service when ICAM gets enabled/disabled
+- capmt: accept OSCam CA_SET_DESCR_MODE algo 3 (CW_ALGO_CSA_ALT, sent with
+  extended_cw_api) as CSA instead of rejecting it as "Invalid algo"
+- tvhcsa: warn once if an ICAM key is set but libdvbcsa has no
+  dvbcsa_bs_key_set_ecm()
+
+diff --git a/src/descrambler/capmt.c b/src/descrambler/capmt.c
+index 73e8a0a5298da96a260d5ff8c4d38acfa381370b..b586d617f1ec2becdd44d607a7c2d0a938caddee 100644
+--- a/src/descrambler/capmt.c
++++ b/src/descrambler/capmt.c
+@@ -139,6 +139,7 @@ typedef struct ca_info {
+     CA_ALGO_DVBCSA,
+     CA_ALGO_DES,
+     CA_ALGO_AES,
++    CA_ALGO_DVBCSA_ALT, /* OSCam CW_ALGO_CSA_ALT (ICAM) */
+   } algo;
+   enum {
+     CA_MODE_ECB,
+@@ -1226,6 +1227,7 @@ capmt_send_key(capmt_t *capmt)
+   cai = &capmt->capmt_adapters[adapter].ca_info[index];
+   switch (cai->algo) {
+   case CA_ALGO_DVBCSA:
++  case CA_ALGO_DVBCSA_ALT: /* ICAM mode is detected from the ECM */
+     type = DESCRAMBLER_CSA_CBC;
+     break;
+   case CA_ALGO_DES:
+@@ -1511,7 +1513,7 @@ capmt_analyze_cmd(capmt_t *capmt, uint32_t cmd, int adapter, sbuf_t *sb, int off
+       tvherror(LS_CAPMT, "%s: Invalid adapter %d or index %d", capmt_name(capmt), adapter, index);
+       return;
+     }
+-    if (algo < 0 || algo > 2) {
++    if (algo < 0 || algo > CA_ALGO_DVBCSA_ALT) {
+       tvherror(LS_CAPMT, "%s: Invalid algo %d", capmt_name(capmt), algo);
+       return;
+     }
+diff --git a/src/descrambler/descrambler.c b/src/descrambler/descrambler.c
+index 205a1540c2821cc53b197081b85e49ac0aa8dec6..10ff9c5bcb83c08b50daa79b613fdded85dbaa14 100644
 --- a/src/descrambler/descrambler.c
 +++ b/src/descrambler/descrambler.c
-@@ -1301,6 +1301,8 @@ descrambler_table_callback
+@@ -393,6 +393,38 @@ descrambler_quick_ecm ( mpegts_service_t *t, int pid )
+   return 0;
+ }
+ 
++/*
++ * Track the ICAM (CSA-ALT) mode of the VideoGuard ECMs, the keys
++ * received afterwards are bound to this mode in descrambler_keys()
++ */
++static void
++descrambler_ecm_mode_update ( mpegts_service_t *t, int pid, const uint8_t *ptr )
++{
++  th_descrambler_runtime_t *dr;
++  elementary_stream_t *st;
++  caid_t *ca;
++  int mode = -1;
++
++  tvh_mutex_lock(&t->s_stream_mutex);
++  if ((dr = t->s_descramble) != NULL) {
++    TAILQ_FOREACH(st, &t->s_components.set_filter, es_filter_link) {
++      if (st->es_pid != pid) continue;
++      LIST_FOREACH(ca, &st->es_caids, link) {
++        if (ca->use == 0 || !caid_is_videoguard(ca->caid)) continue;
++        mode = (ptr[4] != 0 && (ptr[2] - ptr[4]) == 4) ? 4 : 0;
++        break;
++      }
++      if (mode >= 0) break;
++    }
++    if (mode >= 0 && mode != dr->dr_ecm_mode) {
++      tvhinfo(LS_DESCRAMBLER, "ICAM (CSA-ALT) %s for service \"%s\" (ECM pid %d)",
++              mode ? "enabled" : "disabled", t->s_dvb_svcname, pid);
++      dr->dr_ecm_mode = mode;
++    }
++  }
++  tvh_mutex_unlock(&t->s_stream_mutex);
++}
++
+ /*
+  * This routine is called from two places
+  * a) start a new service
+@@ -786,6 +818,8 @@ cont:
+     }
+ 
+   if (even && memcmp(empty, even, tk->key_csa.csa_keylen)) {
++    if (memcmp(tk->key_data[0], even, tk->key_csa.csa_keylen))
++      tk->key_ecm[0] = dr->dr_ecm_mode;
+     memcpy(tk->key_data[0], even, tk->key_csa.csa_keylen);
+     tk->key_pid = pid;
+     changed |= 1;
+@@ -803,6 +837,8 @@ cont:
+     even = empty;
+   }
+   if (odd && memcmp(empty, odd, tk->key_csa.csa_keylen)) {
++    if (memcmp(tk->key_data[1], odd, tk->key_csa.csa_keylen))
++      tk->key_ecm[1] = dr->dr_ecm_mode;
+     memcpy(tk->key_data[1], odd, tk->key_csa.csa_keylen);
+     tk->key_pid = pid;
+     changed |= 2;
+@@ -975,11 +1011,13 @@ key_flush( th_descrambler_runtime_t *dr, th_descrambler_key_t *tk, uint8_t chang
+   /* update the keys */
+   if (changed & 1) {
+     debug2("%p: even key[%d] set for decoder", dr, tk->key_pid);
++    tk->key_csa.csa_ecm = tk->key_ecm[0];
+     tvhcsa_set_key_even(&tk->key_csa, tk->key_data[0]);
+     tk->key_valid |= 0x40;
+   }
+   if (changed & 2) {
+     debug2("%p: odd key[%d] set for decoder", dr, tk->key_pid);
++    tk->key_csa.csa_ecm = tk->key_ecm[1];
+     tvhcsa_set_key_odd(&tk->key_csa, tk->key_data[1]);
+     tk->key_valid |= 0x80;
+   }
+@@ -1310,8 +1348,6 @@ descrambler_table_callback
    int64_t clk, clk2, clk3;
    uint8_t ki;
    int i, j;
-+  caid_t *ca;
-+  elementary_stream_t *st;
+-  caid_t *ca;
+-  elementary_stream_t *st;
  
    if (len < 6)
      return 0;
-@@ -1362,13 +1364,20 @@ descrambler_table_callback
-               if (dr->dr_ecm_parity == ECM_PARITY_81EVEN_80ODD)
-                 j ^= 1;
-               dr->dr_ecm_start[j] = clk;
--              if (dr->dr_quick_ecm) {
--                ki = 1 << (j + 6); /* 0x40 = even, 0x80 = odd */
--                for (i = 0; i < DESCRAMBLER_MAX_KEYS; i++) {
--                  tk = &dr->dr_keys[i];
-+              ki = 1 << (j + 6); /* 0x40 = even, 0x80 = odd */
-+              for (i = 0; i < DESCRAMBLER_MAX_KEYS; i++) {
-+                tk = &dr->dr_keys[i];
-+                if (dr->dr_quick_ecm)
+@@ -1355,6 +1391,9 @@ descrambler_table_callback
+ 
+   LIST_FOREACH(des, &sections, active_link) {
+     if (des->changed == 2) {
++      /* before the callback, the key may arrive quickly (cache) */
++      if (!emm && (ptr[0] & 0xfe) == 0x80 && mt->mt_service)
++        descrambler_ecm_mode_update(mt->mt_service, mt->mt_pid, ptr);
+       des->callback(des->opaque, mt->mt_pid, ptr, len, emm);
+       if (!emm) { /* ECM */
+         if ((t = mt->mt_service) != NULL) {
+@@ -1379,14 +1418,6 @@ descrambler_table_callback
+                 tk = &dr->dr_keys[i];
+                 if (dr->dr_quick_ecm)
                    tk->key_valid &= ~ki;
--                  if (tk->key_pid == 0) break;
-+                TAILQ_FOREACH(st, &mt->mt_service->s_components.set_filter, es_filter_link) {
-+                  if (st->es_pid != mt->mt_pid) continue;
-+                    LIST_FOREACH(ca, &st->es_caids, link) {
-+                    if (ca->use == 0) continue;
-+                    tk->key_csa.csa_ecm = (caid_is_videoguard(ca->caid) && (ptr[4] != 0 && (ptr[2] - ptr[4]) == 4)) ? ptr[21] : 0;
-+                    tvhtrace(LS_DESCRAMBLER, "key ecm=%X (caid=%04X)", tk->key_csa.csa_ecm, ca->caid);
-+                  }
-                 }
-+                if (tk->key_pid == 0) break;
+-                TAILQ_FOREACH(st, &mt->mt_service->s_components.set_filter, es_filter_link) {
+-                  if (st->es_pid != mt->mt_pid) continue;
+-                    LIST_FOREACH(ca, &st->es_caids, link) {
+-                    if (ca->use == 0) continue;
+-                    tk->key_csa.csa_ecm = (caid_is_videoguard(ca->caid) && (ptr[4] != 0 && (ptr[2] - ptr[4]) == 4)) ? 4 : 0;
+-                    tvhtrace(LS_DESCRAMBLER, "key ecm=%X (caid=%04X)", tk->key_csa.csa_ecm, ca->caid);
+-                  }
+-                }
+                 if (tk->key_pid == 0) break;
                }
              }
-             tvhtrace(LS_DESCRAMBLER, "ECM message %02x:%02x (section %d, len %d, pid %d) for service \"%s\"",
---- a/src/descrambler/tvhcsa.h
-+++ b/src/descrambler/tvhcsa.h
-@@ -26,6 +26,9 @@ struct elementary_stream;
- #include "build.h"
+diff --git a/src/descrambler/descrambler.h b/src/descrambler/descrambler.h
+index ac5ff312c962c92d716b1a4a062ccd390f4cd533..d17e2ae6d3002bcd188e6ab338606ddb327700a5 100644
+--- a/src/descrambler/descrambler.h
++++ b/src/descrambler/descrambler.h
+@@ -82,6 +82,7 @@ typedef struct th_descrambler_key {
+   uint8_t  key_index;
+   uint8_t  key_valid;
+   uint8_t  key_type_overwritten;
++  uint8_t  key_ecm[2];      /* ICAM mode for key_data, 0 = even, 1 = odd */
+   tvhlog_limit_t key_loglimit;
+ } th_descrambler_key_t;
+ 
+@@ -95,6 +96,7 @@ typedef struct th_descrambler_runtime {
+   int      dr_ca_failed;
+   int      dr_ca_fatal;
+   int      dr_ecm_parity;
++  uint8_t  dr_ecm_mode;     /* ICAM mode from the last VideoGuard ECM */
+   uint32_t dr_external:1;
+   uint32_t dr_skip:1;
+   uint32_t dr_quick_ecm:1;
+diff --git a/src/descrambler/tvhcsa.c b/src/descrambler/tvhcsa.c
+index 2c75f89693635de0f3695e8b94a7e41a707e464f..6a6de124401ef1ae20f46d5d20a9f26f57647b46 100644
+--- a/src/descrambler/tvhcsa.c
++++ b/src/descrambler/tvhcsa.c
+@@ -34,6 +34,7 @@
+ 
  #if ENABLE_DVBCSA
- #include <dvbcsa/dvbcsa.h>
-+#if DVBCSA_KEY_ECM > 0
-+#define dvbcsa_bs_key_set(a,b) dvbcsa_bs_key_set_ecm(csa->csa_ecm,a,b)
-+#endif
+ static int dvbcsa_dl_scanned;
++static int dvbcsa_dl_warned;
+ static dvbcsa_dl_bs_key_set_type dvbcsa_dl_bs_key_set_ecm;
  #endif
- #include "tvhlog.h"
  
-@@ -47,6 +50,7 @@ typedef struct tvhcsa
-   uint8_t *csa_tsbcluster;
-   int      csa_fill;
-   int      csa_fill_size;
-+  uint8_t  csa_ecm;
- 
- #if ENABLE_DVBCSA
-   struct dvbcsa_bs_batch_s *csa_tsbbatch_even;
+@@ -332,7 +333,10 @@ dvbcsa_bs_key_set_wrap(const unsigned char ecm, const dvbcsa_cw_t cw, struct dvb
+ {
+   if (dvbcsa_dl_bs_key_set_ecm)
+     dvbcsa_dl_bs_key_set_ecm(ecm, cw, key);
+-  else
++  else {
++    if (ecm && !dvbcsa_dl_warned++)
++      tvhwarn(LS_CSA, "ICAM key requested but libdvbcsa lacks dvbcsa_bs_key_set_ecm()");
+     dvbcsa_bs_key_set(cw, key);
++  }
+ }
+ #endif
