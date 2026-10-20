@@ -15,6 +15,11 @@ ARG ARGTABLE_VER="2.13"
 ARG TZ="Europe/Vienna"
 ARG TVHEADEND_COMMIT
 ENV HOME="/config"
+# npm for the Vue web UI is slow under QEMU, retry network timeouts
+ENV npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000 \
+    npm_config_fetch_timeout=600000
 
 # copy patches and picons
 COPY patches/ /tmp/patches/
